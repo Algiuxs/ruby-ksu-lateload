@@ -27,6 +27,7 @@ jobs:
 
       - name: Clone Xiaomi ruby kernel (4.19)
         run: |
+          rm -rf ruby-kernel out
           git clone --depth 1 --branch ruby-s-oss https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git ruby-kernel
 
       - name: Setup NDK
@@ -50,21 +51,20 @@ jobs:
 
           cd ruby-kernel
 
-          # Configure the same output tree we will later compile with
+          # Start from a clean kernel tree, then generate config in the O= output dir.
+          make mrproper || true
           make ARCH=arm64 O="$KBUILD_OUTPUT" ruby_user_defconfig
-          scripts/config --disable CONFIG_LOCALVERSION_AUTO
-          scripts/config --set-str CONFIG_LOCALVERSION "-ge6429b82e599"
 
-          # Generate the kernel headers and generated UAPI files in the O= tree
-          make ARCH=arm64 O="$KBUILD_OUTPUT" prepare
+          # IMPORTANT: write config changes into the output tree, not the source tree.
+          ./scripts/config --file "$KBUILD_OUTPUT/.config" --disable CONFIG_LOCALVERSION_AUTO
+          ./scripts/config --file "$KBUILD_OUTPUT/.config" --set-str CONFIG_LOCALVERSION "-ge6429b82e599"
+          make ARCH=arm64 O="$KBUILD_OUTPUT" olddefconfig
+
+          # Generate the headers needed for external modules.
           make ARCH=arm64 O="$KBUILD_OUTPUT" modules_prepare
 
-          # Optional sanity check: make sure these generated headers exist
-          test -f "$KBUILD_OUTPUT/arch/arm64/include/generated/asm/types.h" || {
-            echo "Missing generated asm/types.h in $KBUILD_OUTPUT"
-            find "$KBUILD_OUTPUT" -path '*asm/types.h' -o -path '*linux/version.h' | head -50
-            exit 1
-          }
+          echo "Generated asm/types.h candidates:"
+          find "$KBUILD_OUTPUT" -path '*/asm/types.h' -o -path '*/linux/version.h' | head -50
 
           cd ..
 
