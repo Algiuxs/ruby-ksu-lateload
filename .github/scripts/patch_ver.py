@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Patch the kernel version string in a KernelSU .ko binary."""
+"""Patch the kernel version string in a KernelSU .ko binary.
+
+If the target version string is already present in the binary, nothing is
+written (idempotent).
+"""
 
 import sys
 import struct
@@ -7,10 +11,18 @@ import struct
 def patch_version(input_path, target_version, output_path):
     with open(input_path, 'rb') as f:
         data = bytearray(f.read())
-    
-    old_pattern = b'4.19.191-g914ba8403bb3-dirty SMP preempt mod_unload modversions aarch64'
+
     new_pattern = target_version.encode('ascii')
     new_pattern = new_pattern.replace(b'+', b'')
+
+    # Idempotent check: if target version is already in the binary, skip
+    if new_pattern in data:
+        print('Already patched: version string "%s" already present' % target_version)
+        with open(output_path, 'wb') as f:
+            f.write(data)
+        return True
+
+    old_pattern = b'4.19.191-g914ba8403bb3-dirty SMP preempt mod_unload modversions aarch64'
     
     idx = data.find(old_pattern)
     if idx < 0:

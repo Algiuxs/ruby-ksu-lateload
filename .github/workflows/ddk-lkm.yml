@@ -1,17 +1,8 @@
-name: Build KernelSU Kernel Module
+name: Build KernelSU Kernel Module for Ruby (4.19)
 
 on:
   workflow_call:
     inputs:
-      kmi:
-        description: 'KMI version'
-        required: true
-        type: string
-      ddk_release:
-        description: 'DDK release version'
-        required: false
-        default: '20260313'
-        type: string
       expected_size2:
         description: 'Second expected signature size (for PR builds)'
         required: false
@@ -25,26 +16,42 @@ on:
 
 jobs:
   build-kernelsu-ko:
-    name: Build kernelsu.ko for ${{ inputs.kmi }}
+    name: Build kernelsu.ko for ruby (4.19, Android 14)
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/ylarod/ddk-min:${{ inputs.kmi }}-${{ inputs.ddk_release }}
-      options: --privileged
 
     steps:
     - name: Checkout source code
       uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
 
-    - name: Build kernelsu.ko
+    - name: Clone Xiaomi ruby kernel (4.19)
+      run: |
+        git clone --depth 1 --branch ruby-s-oss https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git ruby-kernel
+
+    - name: Setup NDK
+      uses: nttld/setup-ndk@v1
+      id: setup-ndk
+      with:
+        ndk-version: r29
+
+    - name: Build kernelsu.ko for ruby
       env:
         EXPECTED_SIZE2: ${{ inputs.expected_size2 }}
         EXPECTED_HASH2: ${{ inputs.expected_hash2 }}
+        NDK_PATH: ${{ steps.setup-ndk.outputs.ndk-path }}
       run: |
-        git config --global --add safe.directory /__w/KernelSU/KernelSU
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-        cd kernel
+        # Prepare kernel config for ruby (MT6877, 4.19.191)
+        cd ruby-kernel
+        make ARCH=arm64 ruby_user_defconfig
+        # Disable LOCALVERSION_AUTO to avoid '+' suffix in vermagic
+        scripts/config --disable CONFIG_LOCALVERSION_AUTO
+        scripts/config --set-str CONFIG_LOCALVERSION "-ge6429b82e599"
+        cd ..
 
-        echo "=== Building kernelsu.ko for KMI: ${{ inputs.kmi }} ==="
+        echo "=== Building kernelsu.ko for ruby (4.19, Android 14) ==="
 
         EXTRA_ARGS=""
         if [ -n "$EXPECTED_SIZE2" ] && [ -z "$EXPECTED_HASH2" ]; then
@@ -58,25 +65,40 @@ jobs:
         if [ -n "$EXPECTED_SIZE2" ]; then
           EXTRA_ARGS="KSU_EXPECTED_SIZE2=$EXPECTED_SIZE2 KSU_EXPECTED_HASH2=$EXPECTED_HASH2"
         fi
-        CONFIG_KSU=m CC=clang make $EXTRA_ARGS
-        
-        echo "=== Build completed ==="
 
-        # Create output directory in GitHub workspace
-        mkdir -p /github/workspace/out
+        export PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 
-        # Copy with KMI-specific naming
-        OUTPUT_NAME="${{ inputs.kmi }}_kernelsu.ko"
-        cp kernelsu.ko "/github/workspace/out/$OUTPUT_NAME"
-        
-        echo "Copied to: /github/workspace/out/$OUTPUT_NAME"
-        ls -la "/github/workspace/out/$OUTPUT_NAME"
-        echo "Size: $(du -h "/github/workspace/out/$OUTPUT_NAME" | cut -f1)"
-        llvm-strip -d "/github/workspace/out/$OUTPUT_NAME"
-        echo "Size after stripping: $(du -h "/github/workspace/out/$OUTPUT_NAME" | cut -f1)"
+        make -C ruby-kernel M="$PWD/kernel" src="$PWD/kernel" O="$PWD/out/ruby" \
+          ARCH=arm64 \
+          CROSS_COMPILE=aarch64-linux-android- \
+          LLVM=1 LLVM_IAS=1 \
+          CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm \
+          OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip \
+          CONFIG_KSU=m \
+          CONFIG_KSU_LEGACY_4_19=y \
+          KSU_VERSION_OVERRIDE=32548 \
+          $EXTRA_ARGS \
+          modules -j"$(nproc)"
+
+    - name: Patch vermagic
+      run: |
+        python3 .github/scripts/patch_ver.py out/ruby/kernelsu.ko "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64" out/ruby/kernelsu.ko
+
+    - name: Verify vermagic patch
+      run: |
+        python3 .github/scripts/verify_patch.py out/ruby/kernelsu.ko "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64" 0xf0c01ec5 module_layout
+
+    - name: Patch CRC
+      run: |
+        python3 .github/scripts/patch_crc.py out/ruby/kernelsu.ko 0xf0c01ec5 module_layout
+        cp out/ruby/kernelsu_patched.ko out/ruby/ruby_kernelsu.ko
+
+    - name: Verify CRC patch
+      run: |
+        python3 .github/scripts/verify_patch.py out/ruby/ruby_kernelsu.ko "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64" 0xf0c01ec5 module_layout
 
     - name: Upload kernelsu.ko artifact
       uses: actions/upload-artifact@v7
       with:
-        name: ${{ inputs.kmi }}-lkm
-        path: /github/workspace/out/${{ inputs.kmi }}_kernelsu.ko
+        name: ruby-lkm
+        path: out/ruby/ruby_kernelsu.ko
