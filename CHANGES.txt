@@ -1,0 +1,63 @@
+from .. run to build:
+make -C . M="$PWD/xpad2-ksu-lateload/kernel" src="$PWD/xpad2-ksu-lateload/kernel" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CONFIG_KSU=m CONFIG_KSU_LEGACY_4_19=y modules -j"$(nproc)" && python patch_ver.py xpad2-ksu-lateload/kernel/kernelsu.ko "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64" kernelsu_patched.ko && python3 patch_crc.py kernelsu_patched.ko 0xf0c01ec5 module_layout
+
+
+load on device:
+adb push kernelsu_patched.ko /data/local/tmp/                                                                                                                                          ─╯
+adb shell 'su -c "/data/app/~~WHc*/me.*/lib/arm64/libksud.so insmod /data/local/tmp/kernelsu_patched.ko"'
+adb shell 'su -c "lsmod | grep kernelsu"'
+adb shell 'su -c "dmesg | tail -30"'
+
+changes done so far:
+added the getneigh feild to policydb struct:
+struct policydb {
+        int mls_enabled;
+        int android_netlink_route;
+        int android_netlink_getneigh; <-- (this was not there before. the source changed probably. xiaomi did not release the latest source)
+...
+
+now it gets the correct layout
+
+
+in ksu_legacy_phys_from_ttbr1:
+if (level < ARRAY_SIZE(shifts) - 1 && !(desc & 2)) {
+    u64 mask = GENMASK_ULL(47, shifts[level]);
+    return (desc & mask) | (va & ~mask);
+}
+-->>>
+if (level < ARRAY_SIZE(shifts) - 1 && !(desc & 2)) {
+    u64 mask = GENMASK_ULL(47, shifts[level]);
+    u64 offset_mask = GENMASK_ULL(shifts[level] - 1, 0);
+    u64 phys = (desc & mask) | (va & offset_mask);
+
+    pr_info("KSU: block translation level=%d desc=%016llx "
+            "mask=%016llx offset=%016llx phys=%016llx\n",
+            level,
+            (unsigned long long)desc,
+            (unsigned long long)mask,
+            (unsigned long long)(va & offset_mask),
+            (unsigned long long)phys);
+
+    return (unsigned long)phys;
+}
+
+
+in kernel/hook/arm64/patch_memory.c:
+ret = probe_kernel_write(waddr, src, len);
+if (!ret) {
+    __flush_dcache_area(waddr, len);
+    dsb(ish);
+    __inval_dcache_area(dst, len);
+    dsb(ish);
+}
+--->>
+ret = probe_kernel_write(waddr, src, len);
+if (!ret) {
+    /*
+     * Clean and invalidate through the writable fixmap alias.
+     * Do not perform cache maintenance through dst: the original
+     * sys_call_table mapping is read-only.
+     */
+    __flush_dcache_area(waddr, len);
+    dsb(ish);
+}

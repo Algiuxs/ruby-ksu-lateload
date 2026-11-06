@@ -53,8 +53,10 @@ static struct policydb *clone_legacy_policydb(struct selinux_state *state)
 
         if (READ_ONCE(active->android_netlink_route))
             *config |= POLICYDB_CONFIG_ANDROID_NETLINK_ROUTE;
+#ifdef POLICYDB_CONFIG_ANDROID_NETLINK_GETNEIGH
         if (READ_ONCE(active->android_netlink_getneigh))
             *config |= POLICYDB_CONFIG_ANDROID_NETLINK_GETNEIGH;
+#endif
     }
 
     db = kzalloc(sizeof(*db), GFP_KERNEL);
@@ -109,6 +111,11 @@ static void reset_avc_cache(u32 seqno)
 
 void apply_kernelsu_rules()
 {
+#define KSU_DUMP_PDB(label, p)                                                                                         \
+    pr_err("KSU %s: db=%px p_types=%px table=%px nprim=%u "                                                            \
+           "policyvers=%d len=%u\n",                                                                                   \
+           label, p, &(p)->p_types, (p)->p_types.table, (p)->p_types.nprim, (p)->policyvers, (p)->len)
+
     struct policydb *db;
 #ifdef CONFIG_KSU_LEGACY_4_19
     struct policydb *old_db;
@@ -136,9 +143,24 @@ void apply_kernelsu_rules()
         return;
     }
 
+    pr_err("KSU: state=%px ss=%px policydb=%px\n", state, ss, &ss->policydb);
+
+    print_hex_dump(KERN_ERR, "KSU policydb raw: ", DUMP_PREFIX_OFFSET, 16, 8, &ss->policydb, 0x60, false);
+
+    KSU_DUMP_PDB("live", &ss->policydb);
+
     db = clone_legacy_policydb(state);
-    if (IS_ERR(db))
+    if (IS_ERR(db)) {
+        pr_err("legacy SELinux: clone failed: %ld\n", PTR_ERR(db));
         return;
+    }
+
+    if (!db) {
+        pr_err("legacy SELinux: clone returned NULL\n");
+        return;
+    }
+
+    KSU_DUMP_PDB("clone", db);
 #else
     mutex_lock(&selinux_state.policy_mutex);
     backup_sepolicy =

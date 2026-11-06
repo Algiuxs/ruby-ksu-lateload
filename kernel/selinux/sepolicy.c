@@ -689,6 +689,19 @@ void *ksu_kvrealloc_compat(const void *p, size_t oldsize, size_t newsize, gfp_t 
 
 static bool add_type(struct policydb *db, const char *type_name, bool attr)
 {
+    if (unlikely(!db)) {
+        pr_err("KSU: add_type received NULL policydb\n");
+        return false;
+    }
+
+    pr_err("KSU: add_type db=%px p_types=%px table=%px nprim=%u name=%s\n", db, &db->p_types, db->p_types.table,
+           db->p_types.nprim, type_name);
+
+    if (unlikely((unsigned long)db->p_types.table < PAGE_SIZE)) {
+        pr_err("KSU: invalid p_types hash table: %px\n", db->p_types.table);
+        return false;
+    }
+
     struct type_datum *type = symtab_search(&db->p_types, type_name);
     if (type) {
         pr_warn("Type %s already exists\n", type_name);

@@ -6,6 +6,7 @@
 #include <linux/sched.h>
 #include <linux/workqueue.h>
 #include <linux/moduleparam.h>
+#include <asm/page.h>
 
 /* Linux 4.19 predates symbol namespaces. */
 #ifndef MODULE_IMPORT_NS
@@ -63,12 +64,34 @@ __attribute__((no_stack_protector)) void __init ksu_setup_stack_chk_guard()
     __stack_chk_guard = canary;
 }
 
-__attribute__((naked)) int __init kernelsu_init_early(void)
+#ifdef CONFIG_CFI_CLANG
+/*
+ * The kernel resolves this symbol for every loaded module and uses it as
+ * the module's CFI check target.  This module is compiled without Clang
+ * CFI, so accept every call: the kernel's __cfi_slowpath() then permits
+ * the module's syscall adapters, which are reached through sys_call_table.
+ * The kernel requires this symbol to be page aligned.
+ */
+void __cfi_check(uint64_t id, void *ptr, void *diag)
+    __attribute__((aligned(PAGE_SIZE)));
+void __cfi_check(uint64_t id, void *ptr, void *diag)
 {
-    asm("mov x19, x30;\n"
-        "bl ksu_setup_stack_chk_guard;\n"
-        "mov x30, x19;\n"
-        "b kernelsu_init;\n");
+}
+#endif
+
+int __init kernelsu_init(void);
+
+/*
+ * GCC does not implement the naked attribute on AArch64, and an ordinary
+ * prologue here would read __stack_chk_guard before it has been set up.
+ * no_stack_protector gives the same guarantee without compiler-specific
+ * top-level asm: this wrapper itself has no canary, and the real init runs
+ * only after the guard has been initialised.
+ */
+__attribute__((no_stack_protector)) int __init kernelsu_init_early(void)
+{
+    ksu_setup_stack_chk_guard();
+    return kernelsu_init();
 }
 #define NEED_OWN_STACKPROTECTOR 1
 #else

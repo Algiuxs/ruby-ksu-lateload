@@ -188,7 +188,7 @@ static syscall_fn_t ksu_legacy_adapter(int nr)
 }
 #endif
 
-static int patch_syscall_table(int nr, syscall_fn_t fn)
+/*static int patch_syscall_table(int nr, syscall_fn_t fn)
 {
     if (ksu_syscall_table == NULL)
         return -ENOENT;
@@ -203,6 +203,36 @@ static int patch_syscall_table(int nr, syscall_fn_t fn)
         return -EIO;
     }
 
+    return 0;
+}*/
+
+static int patch_syscall_table(int nr, syscall_fn_t fn)
+{
+    syscall_fn_t *slot;
+    syscall_fn_t old;
+    int ret;
+
+    if (ksu_syscall_table == NULL)
+        return -ENOENT;
+
+    if (nr < 0 || nr >= __NR_syscalls)
+        return -EINVAL;
+
+    slot = &ksu_syscall_table[nr];
+    old = READ_ONCE(*slot);
+
+    pr_info("KSU: patch syscall %d, slot=%px, old=%px, new=%px\n",
+            nr, slot, old, fn);
+
+    ret = ksu_patch_text(slot, &fn, sizeof(fn),
+                         KSU_PATCH_TEXT_FLUSH_DCACHE);
+
+    if (ret) {
+        pr_err("KSU: patch syscall %d failed: ret=%d\n", nr, ret);
+        return ret;
+    }
+
+    pr_info("KSU: patch syscall %d succeeded\n", nr);
     return 0;
 }
 

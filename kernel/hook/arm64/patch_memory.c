@@ -26,7 +26,6 @@
 #include <asm/sysreg.h>
 
 static DEFINE_RAW_SPINLOCK(ksu_legacy_patch_lock);
-extern void **ksu_syscall_table;
 
 static unsigned long ksu_legacy_phys_from_ttbr1(unsigned long va)
 {
@@ -35,24 +34,33 @@ static unsigned long ksu_legacy_phys_from_ttbr1(unsigned long va)
     int level;
 
     for (level = 0; level < ARRAY_SIZE(shifts); level++) {
-        unsigned long entry_phys = table +
-            (((va >> shifts[level]) & 0x1ff) * sizeof(u64));
+        unsigned long entry_phys = table + (((va >> shifts[level]) & 0x1ff) * sizeof(u64));
         void *map;
         u64 desc;
 
         __set_fixmap(FIX_TEXT_POKE0, entry_phys,
-                     __pgprot(_PROT_DEFAULT | PTE_PXN | PTE_UXN |
-                              PTE_ATTRINDX(MT_NORMAL) | PTE_NG));
-        map = (void *)(fix_to_virt(FIX_TEXT_POKE0) +
-                       offset_in_page(entry_phys));
+                     __pgprot(_PROT_DEFAULT | PTE_PXN | PTE_UXN | PTE_ATTRINDX(MT_NORMAL) | PTE_NG));
+        map = (void *)(fix_to_virt(FIX_TEXT_POKE0) + offset_in_page(entry_phys));
         desc = READ_ONCE(*(u64 *)map);
         __set_fixmap(FIX_TEXT_POKE0, 0, __pgprot(0));
 
         if (!(desc & 1))
             return 0;
-        if (level < ARRAY_SIZE(shifts) - 1 && !(desc & 2)) {
+        /*if (level < ARRAY_SIZE(shifts) - 1 && !(desc & 2)) {
             u64 mask = GENMASK_ULL(47, shifts[level]);
             return (desc & mask) | (va & ~mask);
+        }*/
+        if (level < ARRAY_SIZE(shifts) - 1 && !(desc & 2)) {
+            u64 mask = GENMASK_ULL(47, shifts[level]);
+            u64 offset_mask = GENMASK_ULL(shifts[level] - 1, 0);
+            u64 phys = (desc & mask) | (va & offset_mask);
+
+            pr_info("KSU: block translation level=%d desc=%016llx "
+                    "mask=%016llx offset=%016llx phys=%016llx\n",
+                    level, (unsigned long long)desc, (unsigned long long)mask, (unsigned long long)(va & offset_mask),
+                    (unsigned long long)phys);
+
+            return (unsigned long)phys;
         }
         table = desc & GENMASK_ULL(47, 12);
     }
@@ -68,8 +76,7 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
     void *waddr;
     int ret;
 
-    if (!dst || !src || !len || len > PAGE_SIZE ||
-        offset_in_page(dst) + len > PAGE_SIZE)
+    if (!dst || !src || !len || len > PAGE_SIZE || offset_in_page(dst) + len > PAGE_SIZE)
         return -EINVAL;
 
     /*
@@ -78,60 +85,69 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
      * it take the module/vmalloc path and BUG_ON(vmalloc_to_page() == NULL).
      * Map the kernel-image physical page through the text-poke fixmap
      * directly instead.
+     *
+     * Walk TTBR1 first; only fall back to kimage_voffset when the live
+     * page-table walk cannot resolve the address.  Never guess a physical
+     * address from another device's image layout.
      */
-    {
+    phys = ksu_legacy_phys_from_ttbr1((unsigned long)dst);
+    if (!phys) {
         unsigned long voffset_sym;
 
         voffset_sym = find_kernel_symbol_exact("kimage_voffset");
-        if (voffset_sym &&
-            !probe_kernel_read(&kimage_voffset, (void *)voffset_sym,
-                               sizeof(kimage_voffset))) {
-            /* Use the runtime value. */
-        } else {
-            /* XPad2 MT8797: sys_call_table is at image offset 0xfd16a0,
-             * hence physical 0x80080000 + 0xfd16a0 = 0x810516a0.
-             * Neither _text nor kimage_voffset is exposed in its kallsyms,
-             * but the table address has already been decoded from el0_svc. */
-            if (!ksu_syscall_table)
-                return -ENOENT;
-            kimage_voffset = (unsigned long)ksu_syscall_table -
-                             0x810516a0UL;
-        }
+        if (!voffset_sym || probe_kernel_read(&kimage_voffset, (void *)voffset_sym, sizeof(kimage_voffset)))
+            return -ENOENT;
+        phys = (unsigned long)dst - kimage_voffset;
+    }
+    /*if (!pfn_valid(PHYS_PFN(phys)))
+        return -EINVAL;*/
+    if (!pfn_valid(PHYS_PFN(phys))) {
+        pr_err("KSU: invalid patch PFN: dst=%px phys=%lx "
+               "pfn=%lx page_offset=%lx\n",
+               dst, phys, (unsigned long)PHYS_PFN(phys), offset_in_page(dst));
+        return -EINVAL;
     }
 
-    phys = ksu_legacy_phys_from_ttbr1((unsigned long)dst);
-    if (!phys)
-        phys = (unsigned long)dst - kimage_voffset;
-    if (!pfn_valid(PHYS_PFN(phys)))
-        return -EINVAL;
+    pr_err("KSU: patch translation: dst=%px phys=%lx "
+           "pfn=%lx\n",
+           dst, phys, (unsigned long)PHYS_PFN(phys));
 
     raw_spin_lock_irqsave(&ksu_legacy_patch_lock, irq_flags);
     /* Avoid PAGE_KERNEL/PTE_MAYBE_NG: its inline capability test pulls in
      * non-kallsyms ARM64 static-key data on this vendor build. */
     __set_fixmap(FIX_TEXT_POKE0, phys,
-                 __pgprot(_PROT_DEFAULT | PTE_PXN | PTE_UXN | PTE_WRITE |
-                          PTE_ATTRINDX(MT_NORMAL) | PTE_NG));
+                 __pgprot(_PROT_DEFAULT | PTE_PXN | PTE_UXN | PTE_WRITE | PTE_ATTRINDX(MT_NORMAL) | PTE_NG));
     waddr = (void *)(fix_to_virt(FIX_TEXT_POKE0) + offset_in_page(phys));
-    ret = probe_kernel_write(waddr, src, len);
+    
+    /*ret = probe_kernel_write(waddr, src, len);
     if (!ret) {
         __flush_dcache_area(waddr, len);
         dsb(ish);
         __inval_dcache_area(dst, len);
         dsb(ish);
+    }*/
+    ret = probe_kernel_write(waddr, src, len);
+    if (!ret) {
+        /*
+         * Clean and invalidate through the writable fixmap alias.
+         * Do not perform cache maintenance through dst: the original
+         * sys_call_table mapping is read-only.
+         */
+        __flush_dcache_area(waddr, len);
+        dsb(ish);
     }
+
     __set_fixmap(FIX_TEXT_POKE0, 0, __pgprot(0));
     raw_spin_unlock_irqrestore(&ksu_legacy_patch_lock, irq_flags);
 
     if (ret)
-        pr_err("legacy fixmap patch failed: dst=%pK phys=%lx len=%zu ret=%d\n",
-               dst, phys, len, ret);
+        pr_err("legacy fixmap patch failed: dst=%pK phys=%lx len=%zu ret=%d\n", dst, phys, len, ret);
     else if (len == sizeof(unsigned long)) {
         unsigned long got = READ_ONCE(*(unsigned long *)dst);
         unsigned long want;
 
         memcpy(&want, src, sizeof(want));
-        pr_info("legacy fixmap readback: phys=%lx want=%lx got=%lx ok=%d\n",
-                phys, want, got, want == got);
+        pr_info("legacy fixmap readback: phys=%lx want=%lx got=%lx ok=%d\n", phys, want, got, want == got);
         if (want != got)
             ret = -EIO;
     }
