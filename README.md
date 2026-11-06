@@ -5,25 +5,28 @@ firmware described below. It loads KernelSU at runtime without replacing the
 boot image.
 
 To obtain the temporary root required by the loader on the verified firmware,
-see [yoyicue/xpad2-ionstack-poc](https://github.com/yoyicue/xpad2-ionstack-poc).
+see [ABC00012345/ghostlock_ruby](https://github.com/ABC00012345/ghostlock_ruby).
 That project implements the pure-C, host-assisted re-root stage; this project
 starts at the resulting authorized temporary-root boundary and installs the
 runtime KernelSU module.
 
 This repository is based on upstream
+[xpad2-ksu-lateload](https://github.com/yoyicue/xpad2-ksu-lateload) commit
+`9af3e0ea817fcbdf45b9cb08fc8b9bd1910b1cc3` which is based off
 [KernelSU](https://github.com/tiann/KernelSU) commit
 `ccfee6dc67d79a1404eb71c67b67b4f6c7b65a4a`. The port keeps the upstream GPL
 license and adds a guarded Linux 4.19 compatibility path.
+This port updates kernelsu commit to partial `e9e5b616a433b32c286dbf3f6708afd0c5ef7485`.
 
 ## Verified target
 
-- Product/device: `TALIH_PD2` / `ls12_mt8797_wifi_64`
-- SoC/kernel family: MediaTek MT8797, arm64
-- Android: 13
-- Kernel release: `4.19.191+`
-- Kernel vermagic: `4.19.191+ SMP preempt mod_unload modversions aarch64`
+- Product/device: `ruby` / `Xiaomi Redmi Note 12 Pro 5G`
+- SoC/kernel family: MediaTek MT6877TT, arm64-v8a
+- Android: 14
+- Kernel release: `4.19.191-ge6429b82e599`
+- Kernel vermagic: `4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64`
 - OEM compiler: Android clang `r383902`
-- ksud KMI selector: `xpad2-4.19.191`
+- ksud KMI selector: `ruby-4.19.191`
 
 This is an ABI-specific port. A matching model name alone is not sufficient:
 kernel build, firmware, symbol visibility and module ABI must match. Do not
