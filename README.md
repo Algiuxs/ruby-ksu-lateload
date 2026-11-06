@@ -64,22 +64,7 @@ Build caches, OEM modules, full runtime kallsyms dumps and device-specific
 logs are intentionally excluded from this public-source copy.
 
 ## Prebuilt artifacts
-
-```text
-e930a6929c6cd156f394e6b15bed2258b19205cc17fa3410db7f68cef7b8fb21  artifacts/kernelsu-xpad2-4.19.191.ko
-26ea0f41af159a63a9afdff98963247da9d0bad0363f7e9c937f4cfbcd9f69c6  artifacts/ksud-xpad2
-f7b5da52ca8ca138d33117788226c5d2fca3b8031a6f49fb85e3c33abd7b4ee1  artifacts/kernelsu-xpad2-4.19.191-no-manager.ko
-3145acec98ba2b31f9b376f50ad139bbab3efd812613d595e2328843382959e0  artifacts/ksud-xpad2-no-manager
-```
-
-The same `.ko` is embedded in `ksud-xpad2` under KMI name
-`xpad2-4.19.191`. The generic artifact names are the current Manager-enabled
-build. The `*-no-manager*` pair preserves the v0.1.0 build for audit and
-rollback comparison; it is not the product default.
-
-No Manager APK is bundled or installed by these artifacts. The late-load
-module only enables KernelSU's Manager integration; installation and package
-identity remain separate operator decisions.
+check the ci
 
 ## Build prerequisites
 
