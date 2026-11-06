@@ -1,60 +1,40 @@
 #!/usr/bin/env python3
-"""Patch the kernel version string in a KernelSU .ko binary.
-
-If the target version string is already present in the binary, nothing is
-written (idempotent).
-"""
-
 import sys
-import struct
 
-def patch_version(input_path, target_version, output_path):
-    with open(input_path, 'rb') as f:
+def patch_vermagic(ko_path, new_vermagic, output_path=None):
+    if output_path is None:
+        output_path = ko_path + ".patched"
+
+    with open(ko_path, 'rb') as f:
         data = bytearray(f.read())
 
-    new_pattern = target_version.encode('ascii')
-    new_pattern = new_pattern.replace(b'+', b'')
+    marker = b'vermagic='
+    idx = data.find(marker)
+    if idx == -1:
+        print("ERROR: 'vermagic=' not found"); sys.exit(1)
 
-    # Idempotent check: if target version is already in the binary, skip
-    if new_pattern in data:
-        print('Already patched: version string "%s" already present' % target_version)
-        with open(output_path, 'wb') as f:
-            f.write(data)
-        return True
+    start = idx + len(marker)
+    end = data.find(b'\x00', start)
+    if end == -1:
+        print("ERROR: null terminator not found"); sys.exit(1)
 
-    old_pattern = b'4.19.191-g914ba8403bb3-dirty SMP preempt mod_unload modversions aarch64'
-    
-    idx = data.find(old_pattern)
-    if idx < 0:
-        idx = data.find(b'4.19.191-')
-        if idx < 0:
-            print('ERROR: Could not find version string in', input_path)
-            return False
-        end = min(idx + 60, len(data))
-        old_pattern = data[idx:end]
-        if not old_pattern.startswith(b'4.19.191-'):
-            print('Could not determine version pattern at offset', idx)
-            return False
-    
-    data[idx:idx+len(new_pattern)] = new_pattern
+    old = bytes(data[start:end])
+    print(f"Old vermagic ({len(old)} bytes): {old.decode(errors='replace')}")
+
+    new = new_vermagic.encode()
+    print(f"New vermagic ({len(new)} bytes): {new_vermagic}")
+
+    if len(new) > (end - start):
+        print(f"ERROR: new string is {len(new) - (end - start)} bytes too long"); sys.exit(1)
+
+    data[start:end] = new + b'\x00' * (end - start - len(new))
+
     with open(output_path, 'wb') as f:
         f.write(data)
-    print('Version string patched at offset', idx)
-    return True
+
+    print(f"Written: {output_path}  (null-padded {end - start - len(new)} bytes)")
 
 if __name__ == '__main__':
-    if len(sys.argv) != 4:
-        print('Usage: python3 patch_ver.py <input.ko> <target_version> <output.ko>')
-        print('  target_version example: "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64"')
-        sys.exit(1)
-    
-    input_ko = sys.argv[1]
-    target_ver = sys.argv[2]
-    output_ko = sys.argv[3]
-    
-    success = patch_version(input_ko, target_ver, output_ko)
-    if success:
-        print('Successfully patched', input_ko, '->', output_ko)
-    else:
-        print('Failed to patch version string')
-        sys.exit(1)
+    if len(sys.argv) < 3:
+        print(f"Usage: {sys.argv[0]} <input.ko> \"<new_vermagic>\" [output.ko]"); sys.exit(1)
+    patch_vermagic(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
