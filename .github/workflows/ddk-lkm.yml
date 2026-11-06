@@ -155,22 +155,15 @@ jobs:
             "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64" \
             out/ruby/kernelsu.ko
 
-      - name: Verify vermagic patch
-        run: |
-          python3 .github/scripts/verify_patch.py \
-            out/ruby/kernelsu.ko \
-            "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64" \
-            0xf0c01ec5 module_layout
-
       - name: Patch CRC
         run: |
           python3 .github/scripts/patch_crc.py \
             out/ruby/kernelsu.ko 0xf0c01ec5 module_layout
 
-      - name: Verify CRC patch
+      - name: Verify vermagic and CRC patches
         run: |
           python3 .github/scripts/verify_patch.py \
-            out/ruby/kernelsu.ko \
+            out/ruby/kernelsu_patched.ko \
             "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64" \
             0xf0c01ec5 module_layout
 
