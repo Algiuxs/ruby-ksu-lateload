@@ -48,10 +48,9 @@ jobs:
           KERNEL_SRC="$GITHUB_WORKSPACE/ruby-kernel"
           KBUILD_OUTPUT="$GITHUB_WORKSPACE/out/ruby"
 
-          # Make the NDK LLVM tools available before any kernel make command.
+          # Make the NDK LLVM tools available before running kernel make.
           export PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 
-          # Use the same ARM64/LLVM toolchain for config, preparation, and module build.
           KERNEL_FLAGS=(
             ARCH=arm64
             CROSS_COMPILE=aarch64-linux-android-
@@ -68,7 +67,7 @@ jobs:
 
           mkdir -p "$KBUILD_OUTPUT"
 
-          # Generate and edit the config in the separate output directory.
+          # Configure in the separate output directory.
           make -C "$KERNEL_SRC" "${KERNEL_FLAGS[@]}" \
             O="$KBUILD_OUTPUT" ruby_user_defconfig
 
@@ -83,14 +82,32 @@ jobs:
           make -C "$KERNEL_SRC" "${KERNEL_FLAGS[@]}" \
             O="$KBUILD_OUTPUT" olddefconfig
 
-          # Generate the headers required for the out-of-tree module.
+          # Generate kernel headers for the external module.
           make -C "$KERNEL_SRC" "${KERNEL_FLAGS[@]}" \
             O="$KBUILD_OUTPUT" modules_prepare
 
-          echo "Generated asm/types.h and linux/version.h candidates:"
-          find "$KBUILD_OUTPUT" \
-            \( -path '*/asm/types.h' -o -path '*/linux/version.h' \) \
-            -print
+          # Build and run the kernel's SELinux header generator.
+          make -C "$KERNEL_SRC" "${KERNEL_FLAGS[@]}" \
+            O="$KBUILD_OUTPUT" scripts/selinux/genheaders
+
+          GENHEADERS="$KBUILD_OUTPUT/scripts/selinux/genheaders/genheaders"
+          if [ ! -x "$GENHEADERS" ]; then
+            echo "ERROR: SELinux genheaders executable was not created at $GENHEADERS"
+            find "$KBUILD_OUTPUT/scripts/selinux" -maxdepth 4 -type f -print
+            exit 1
+          fi
+
+          mkdir -p "$KBUILD_OUTPUT/security/selinux"
+          "$GENHEADERS" \
+            "$KBUILD_OUTPUT/security/selinux/flask.h" \
+            "$KBUILD_OUTPUT/security/selinux/av_permissions.h"
+
+          test -f "$KBUILD_OUTPUT/security/selinux/flask.h"
+          test -f "$KBUILD_OUTPUT/security/selinux/av_permissions.h"
+
+          echo "Generated SELinux headers:"
+          ls -l "$KBUILD_OUTPUT/security/selinux/flask.h" \
+            "$KBUILD_OUTPUT/security/selinux/av_permissions.h"
 
           echo "=== Building kernelsu.ko for ruby (4.19, Android 14) ==="
 
@@ -114,6 +131,7 @@ jobs:
             M="$GITHUB_WORKSPACE/kernel" \
             src="$GITHUB_WORKSPACE/kernel" \
             O="$KBUILD_OUTPUT" \
+            KCFLAGS="-I$KBUILD_OUTPUT/security/selinux -I$KERNEL_SRC/security/selinux" \
             CONFIG_KSU=m \
             CONFIG_KSU_LEGACY_4_19=y \
             KSU_VERSION_OVERRIDE=32548 \
