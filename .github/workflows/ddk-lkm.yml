@@ -48,7 +48,6 @@ jobs:
           KERNEL_SRC="$GITHUB_WORKSPACE/ruby-kernel"
           KBUILD_OUTPUT="$GITHUB_WORKSPACE/out/ruby"
 
-          # Make the NDK LLVM tools available before running kernel make.
           export PATH="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
 
           KERNEL_FLAGS=(
@@ -67,7 +66,6 @@ jobs:
 
           mkdir -p "$KBUILD_OUTPUT"
 
-          # Configure in the separate output directory.
           make -C "$KERNEL_SRC" "${KERNEL_FLAGS[@]}" \
             O="$KBUILD_OUTPUT" ruby_user_defconfig
 
@@ -82,11 +80,9 @@ jobs:
           make -C "$KERNEL_SRC" "${KERNEL_FLAGS[@]}" \
             O="$KBUILD_OUTPUT" olddefconfig
 
-          # Generate kernel headers for the external module.
           make -C "$KERNEL_SRC" "${KERNEL_FLAGS[@]}" \
             O="$KBUILD_OUTPUT" modules_prepare
 
-          # Build and run the kernel's SELinux header generator.
           make -C "$KERNEL_SRC" "${KERNEL_FLAGS[@]}" \
             O="$KBUILD_OUTPUT" scripts/selinux/genheaders
 
@@ -104,10 +100,6 @@ jobs:
 
           test -f "$KBUILD_OUTPUT/security/selinux/flask.h"
           test -f "$KBUILD_OUTPUT/security/selinux/av_permissions.h"
-
-          echo "Generated SELinux headers:"
-          ls -l "$KBUILD_OUTPUT/security/selinux/flask.h" \
-            "$KBUILD_OUTPUT/security/selinux/av_permissions.h"
 
           echo "=== Building kernelsu.ko for ruby (4.19, Android 14) ==="
 
@@ -137,6 +129,24 @@ jobs:
             KSU_VERSION_OVERRIDE=32548 \
             "${EXTRA_ARGS[@]}" \
             modules -j"$(nproc)"
+
+      - name: Stage kernel module for patching
+        run: |
+          set -euo pipefail
+
+          mkdir -p out/ruby
+          KO="$(find kernel out/ruby -type f -name kernelsu.ko -print -quit)"
+
+          if [ -z "$KO" ]; then
+            echo "ERROR: kernelsu.ko was not found after the build."
+            find kernel out/ruby -type f -print | sort
+            exit 1
+          fi
+
+          echo "Using module: $KO"
+          if [ "$KO" != "$GITHUB_WORKSPACE/out/ruby/kernelsu.ko" ]; then
+            cp "$KO" out/ruby/kernelsu.ko
+          fi
 
       - name: Patch vermagic
         run: |
