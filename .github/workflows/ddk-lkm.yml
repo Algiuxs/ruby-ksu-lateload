@@ -166,14 +166,17 @@ jobs:
         run: |
           python3 .github/scripts/patch_crc.py \
             out/ruby/kernelsu.ko 0xf0c01ec5 module_layout
-          cp out/ruby/kernelsu_patched.ko out/ruby/ruby_kernelsu.ko
 
       - name: Verify CRC patch
         run: |
           python3 .github/scripts/verify_patch.py \
-            out/ruby/ruby_kernelsu.ko \
+            out/ruby/kernelsu.ko \
             "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64" \
             0xf0c01ec5 module_layout
+
+      - name: Rename kernelsu_patched.ko to ruby_kernelsu.ko
+        run: |
+          mv out/ruby/kernelsu_patched.ko out/ruby/ruby_kernelsu.ko
 
       - name: Upload kernelsu.ko artifact
         uses: actions/upload-artifact@v7
