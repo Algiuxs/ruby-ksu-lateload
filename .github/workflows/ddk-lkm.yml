@@ -49,6 +49,14 @@ jobs:
         # Disable LOCALVERSION_AUTO to avoid '+' suffix in vermagic
         scripts/config --disable CONFIG_LOCALVERSION_AUTO
         scripts/config --set-str CONFIG_LOCALVERSION "-ge6429b82e599"
+        # Generate required headers for out-of-tree module build
+        make ARCH=arm64 prepare >/dev/null 2>&1 || true
+        # Fix asm/types.h symlink (needed by uapi/linux/types.h)
+        ln -sf ../generated/uapi/asm/types.h arch/arm64/include/generated/asm/types.h 2>/dev/null || true
+        # Fix linux/version.h symlink
+        ln -sf ../../generated/uapi/linux/version.h include/uapi/linux/version.h 2>/dev/null || true
+        # Generate SELinux headers (flask.h, av_permissions.h)
+        python3 scripts/selinux/genheaders/genheaders security/selinux/flask.h security/selinux/av_permissions.h 2>/dev/null || true
         cd ..
 
         echo "=== Building kernelsu.ko for ruby (4.19, Android 14) ==="
