@@ -30,6 +30,8 @@ jobs:
           rm -rf ruby-kernel out
           git clone --depth 1 --branch ruby-s-oss \
             https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git ruby-kernel
+          git apply "$GITHUB_WORKSPACE/ruby_kernel_patches.patch"
+
 
       - name: Setup NDK
         uses: nttld/setup-ndk@v1
