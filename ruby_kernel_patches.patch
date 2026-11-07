@@ -1,0 +1,12 @@
+diff --git a/security/selinux/ss/policydb.h b/security/selinux/ss/policydb.h
+index dbb0ed57e..4a18e2e86 100644
+--- a/security/selinux/ss/policydb.h
++++ b/security/selinux/ss/policydb.h
+@@ -239,6 +239,7 @@ struct genfs {
+ struct policydb {
+ 	int mls_enabled;
+ 	int android_netlink_route;
++	int android_netlink_getneigh;
+ 
+ 	/* symbol tables */
+ 	struct symtab symtab[SYM_NUM];
