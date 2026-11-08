@@ -1,4 +1,4 @@
-# XPad2 KernelSU late-load port
+# Ruby KernelSU late-load port
 
 An experimental KernelSU late-load port for the exact XPad2/TALIH PD2
 firmware described below. It loads KernelSU at runtime without replacing the
