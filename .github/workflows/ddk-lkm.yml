@@ -130,7 +130,6 @@ jobs:
             KCFLAGS="-I$KBUILD_OUTPUT/security/selinux -I$KERNEL_SRC/security/selinux" \
             CONFIG_KSU=m \
             CONFIG_KSU_LEGACY_4_19=y \
-            KSU_VERSION_OVERRIDE=32548 \
             "${EXTRA_ARGS[@]}" \
             modules -j"$(nproc)"
 

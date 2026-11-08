@@ -6,9 +6,9 @@ use std::process::Command;
 use crate::module::{handle_updated_modules, prune_modules};
 use crate::{assets, defs, init_event, metamodule, restorecon, utils};
 
-const OFFICIAL_MANAGER_CERT_SIZE: u32 = 0x033b;
+const OFFICIAL_MANAGER_CERT_SIZE: u32 = 0x032e; //changed for manager to work
 const OFFICIAL_MANAGER_CERT_SHA256: &str =
-    "c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6";
+    "e67d026dfcce49dbf34a0d9179c7520a7330c76de6d9967be9b8e6d58cdd6090"; //changed for manager to work
 
 fn get_manager_appid(package_name: &str) -> Result<u32> {
     ensure!(
