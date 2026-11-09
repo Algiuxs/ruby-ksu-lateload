@@ -402,7 +402,7 @@ private fun SulogStatusSection(
                             cornerRadius = 50.dp,
                             insideMargin = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                             colors = ButtonDefaults.textButtonColors(
-                                color = if (isDynamicColor) colorScheme.onErrorContainer else Color(colorScheme.error),
+                                color = if (isDynamicColor) colorScheme.onErrorContainer else colorScheme.error,
                                 textColor = colorScheme.onError,
                             ),
                         )
