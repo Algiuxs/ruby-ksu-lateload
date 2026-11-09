@@ -552,6 +552,12 @@ static bool add_filename_trans(struct policydb *db, const char *s, const char *t
 {
     struct type_datum *src, *tgt, *def;
     struct class_datum *cls;
+#ifndef CONFIG_KSU_LEGACY_4_19
+    struct filename_trans_key *new_key = NULL;
+    int rc;
+#else
+    struct filename_trans *new_key = NULL;
+#endif
 
     src = symtab_search(&db->p_types, s);
     if (src == NULL) {
@@ -584,8 +590,6 @@ static bool add_filename_trans(struct policydb *db, const char *s, const char *t
 
     trans = hashtab_search(db->filename_trans, &key);
     if (trans == NULL) {
-        struct filename_trans *new_key;
-
         trans = kcalloc(1, sizeof(*trans), GFP_ATOMIC);
         if (!trans) {
             pr_err("add_filename_trans: failed to allocate datum\n");
