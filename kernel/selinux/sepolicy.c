@@ -574,7 +574,7 @@ static bool add_filename_trans(struct policydb *db, const char *s, const char *t
         return false;
     }
 
-#ifdef CONFIG_KSU_LEGACY_4_19
+#ifdef CONFIG_KSU_LEGACY_4_19 //commit e9e5b616a433b32c286dbf3f6708afd0c5ef7485
     struct filename_trans key;
     struct filename_trans_datum *trans;
 
@@ -589,38 +589,41 @@ static bool add_filename_trans(struct policydb *db, const char *s, const char *t
         trans = kcalloc(1, sizeof(*trans), GFP_ATOMIC);
         if (!trans) {
             pr_err("add_filename_trans: failed to allocate datum\n");
-            return false;
+            goto out;
         }
 
         new_key = kmalloc(sizeof(*new_key), GFP_ATOMIC);
         if (!new_key) {
-            kfree(trans);
             pr_err("add_filename_trans: failed to allocate key\n");
-            return false;
+            goto free_trans;
         }
 
         *new_key = key;
         new_key->name = kstrdup(key.name, GFP_ATOMIC);
         if (!new_key->name) {
-            kfree(new_key);
-            kfree(trans);
             pr_err("add_filename_trans: failed to allocate name\n");
-            return false;
+            goto free_key;
         }
 
         trans->otype = def->value;
         if (hashtab_insert(db->filename_trans, new_key, trans)) {
-            kfree(new_key->name);
-            kfree(new_key);
-            kfree(trans);
             pr_err("add_filename_trans: failed to insert rule\n");
-            return false;
+            goto free_name;
         }
     } else {
         trans->otype = def->value;
     }
 
     return ebitmap_set_bit(&db->filename_trans_ttypes, src->value - 1, 1) == 0;
+
+free_name:
+    kfree(new_key->name);
+free_key:
+    kfree(new_key);
+free_trans:
+    kfree(trans);
+out:
+    return false;
 #else
     struct filename_trans_key key;
     key.ttype = tgt->value;
@@ -644,16 +647,41 @@ static bool add_filename_trans(struct policydb *db, const char *s, const char *t
 
     if (trans == NULL) {
         trans = (struct filename_trans_datum *)kcalloc(1, sizeof(*trans), GFP_KERNEL);
-        struct filename_trans_key *new_key = (struct filename_trans_key *)kzalloc(sizeof(*new_key), GFP_KERNEL);
+        if (!trans) {
+            pr_err("add_filename_trans: alloc filename_trans_datum failed\n");
+            goto out;
+        }
+        new_key = (struct filename_trans_key *)kzalloc(sizeof(*new_key), GFP_KERNEL);
+        if (!new_key) {
+            pr_err("add_filename_trans: alloc filename_trans_key failed\n");
+            goto free_trans;
+        }
         *new_key = key;
         new_key->name = kstrdup(key.name, GFP_KERNEL);
+        if (!new_key->name) {
+            pr_err("add_filename_trans: kstrdup name failed\n");
+            goto free_key;
+        }
         trans->next = last;
         trans->otype = def->value;
-        hashtab_insert(&db->filename_trans, new_key, trans, filenametr_key_params);
+        rc = hashtab_insert(&db->filename_trans, new_key, trans, filenametr_key_params);
+        if (rc) {
+            pr_err("add_filename_trans: hashtab_insert failed: %d\n", rc);
+            goto free_name;
+        }
     }
 
     db->compat_filename_trans_count++;
     return ebitmap_set_bit(&trans->stypes, src->value - 1, 1) == 0;
+
+free_name:
+    kfree(new_key->name);
+free_key:
+    kfree(new_key);
+free_trans:
+    kfree(trans);
+out:
+    return false;
 #endif
 }
 
