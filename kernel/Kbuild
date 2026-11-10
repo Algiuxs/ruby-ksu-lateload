@@ -82,19 +82,12 @@ ifeq ($(CONFIG_KSU_LEGACY_4_19),y)
 ccflags-y += -DCONFIG_KSU_LEGACY_4_19=1
 endif
 
-# Android NDK r29+ clang defaults aarch64-linux-android to a TPIDR_EL0-based
-# stack canary (the Android userspace TLS slot). That layout only exists when
-# the kernel implements CONFIG_STACKPROTECTOR_PER_TASK; older kernels keep the
-# canary in __stack_chk_guard, so code built with the default guard faults on
-# the first stack-protected function. Match the kernel's guard placement.
-# Note: detect clang via $(CC) rather than CONFIG_CC_IS_CLANG, which is not a
-# Kconfig symbol on older (e.g. Linux 4.19) kernels and would silently skip
-# the flag, leaving clang's sysreg default in place.
+# Force global stack canary guard on ARM64 kernels without
+# CONFIG_STACKPROTECTOR_PER_TASK: clang defaults to TPIDR_EL0 which faults
+# when tpidr_el0 holds a user TLS pointer. (GCC's default is already global.)
 ifeq ($(CONFIG_ARM64),y)
 ifneq ($(CONFIG_STACKPROTECTOR_PER_TASK),y)
-ifneq ($(findstring clang,$(CC)),)
 ccflags-y += -mstack-protector-guard=global
-endif
 endif
 endif
 
