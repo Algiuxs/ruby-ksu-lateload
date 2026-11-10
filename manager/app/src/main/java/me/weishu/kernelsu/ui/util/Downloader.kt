@@ -38,7 +38,7 @@ suspend fun download(
 
 fun checkNewVersion(): LatestVersionInfo {
     if (!isNetworkAvailable(ksuApp)) return LatestVersionInfo()
-    val url = "https://api.github.com/repos/tiann/KernelSU/releases/latest"
+    val url = null //"https://api.github.com/repos/tiann/KernelSU/releases/latest" //TODO
     // default null value if failed
     val defaultValue = LatestVersionInfo()
     runCatching {
