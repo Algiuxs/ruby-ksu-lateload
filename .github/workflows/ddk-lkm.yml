@@ -170,6 +170,25 @@ jobs:
             "4.19.191-ge6429b82e599 SMP preempt mod_unload modversions aarch64" \
             0xf0c01ec5 module_layout
 
+      - name: Verify stack canary guard
+        env:
+          NDK_PATH: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          set -euo pipefail
+          OBJDUMP="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump"
+          PROLOGUE="$("$OBJDUMP" -d out/ruby/kernelsu.ko | awk '
+            /<find_kernel_symbol_exact>:/ { inside = 1; next }
+            inside && /^[0-9a-f]+ </ { exit }
+            inside
+          ')"
+          if printf '%s\n' "$PROLOGUE" | grep -qi 'tpidr_el0'; then
+            echo "ERROR: find_kernel_symbol_exact uses a TPIDR_EL0 stack canary."
+            echo "The ruby kernel has no CONFIG_STACKPROTECTOR_PER_TASK; rebuild"
+            echo "with -mstack-protector-guard=global (see kernel/Kbuild)."
+            exit 1
+          fi
+          echo "Stack canary guard OK (global)"
+
       - name: Rename kernelsu.ko to ruby_kernelsu.ko
         run: |
           mv out/ruby/kernelsu.ko out/ruby/ruby_kernelsu.ko
