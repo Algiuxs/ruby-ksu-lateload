@@ -16,7 +16,7 @@ This repository is based on upstream
 [KernelSU](https://github.com/tiann/KernelSU) commit
 `ccfee6dc67d79a1404eb71c67b67b4f6c7b65a4a`. The port keeps the upstream GPL
 license and adds a guarded Linux 4.19 compatibility path.
-This port updates kernelsu commit to `63b175d8c37482c9fd25fb9bc341289667e4ce57`.
+This port updates kernelsu commit to `99a9ce766969f3e970faabb96cc1d0b7ec7246ca`.
 This for fork not be possible without @ABC00012345 adaptation of the kernelsuxpad repo and his patching scripts.
 
 ## Verified target
