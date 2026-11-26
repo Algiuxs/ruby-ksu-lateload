@@ -18,7 +18,7 @@ This repository is based on upstream
 The port keeps the upstream GPL
 license and adds a guarded Linux 4.19 compatibility path.
 
-This port updates kernelsu commit to `567579a158806600f2f15c9dccb5e9b0428f3a58`.
+This port updates kernelsu commit to `7d7322f20b3163b254e90e81a67e0a6b9c1f0e77`.
 This for fork would not be possible without [@ABC00012345](https://github.com/ABC00012345/) adaptation of the [xpad2-ksu-lateload](https://github.com/yoyicue/xpad2-ksu-lateload) project and his patching scripts.
 
 ## Verified target
