@@ -14,10 +14,12 @@ This repository is based on upstream
 [xpad2-ksu-lateload](https://github.com/yoyicue/xpad2-ksu-lateload) commit
 `9af3e0ea817fcbdf45b9cb08fc8b9bd1910b1cc3` which is based off
 [KernelSU](https://github.com/tiann/KernelSU) commit
-`ccfee6dc67d79a1404eb71c67b67b4f6c7b65a4a`. The port keeps the upstream GPL
+`ccfee6dc67d79a1404eb71c67b67b4f6c7b65a4a`.
+The port keeps the upstream GPL
 license and adds a guarded Linux 4.19 compatibility path.
+
 This port updates kernelsu commit to `567579a158806600f2f15c9dccb5e9b0428f3a58`.
-This for fork not be possible without @ABC00012345 adaptation of the kernelsuxpad repo and his patching scripts.
+This for fork would not be possible without [@ABC00012345](https://github.com/ABC00012345/) adaptation of the [xpad2-ksu-lateload](https://github.com/yoyicue/xpad2-ksu-lateload) project and his patching scripts.
 
 ## Verified target
 
@@ -34,6 +36,7 @@ kernel build, firmware, symbol visibility and module ABI must match. Do not
 load the included module on unrelated devices or firmware revisions.
 
 ## Status
+**Some of the below info is outdated and stale.**
 
 Verified on physical hardware:
 
